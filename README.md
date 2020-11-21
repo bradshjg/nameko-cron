@@ -32,3 +32,13 @@ class Service:
         # executes every day at noon America/Chicago time
         print("pong")
 ```
+
+by default, if a worker takes longer than the next scheduled run the worker will wait until
+the task is complete before immediately launching a new worker. This behavior can be controlled
+via the ``concurrency`` keyword argument.
+
+``ConcurrencyPolicy.WAIT`` is that default behavior.
+
+``ConcurrencyPolicy.ALLOW`` will spawn a worker regardless of whether existing workers are still running.
+
+``ConcurrencyPolicy.SKIP`` will skip a run if the previous worker lapsed the next scheduled run.

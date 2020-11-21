@@ -3,12 +3,12 @@ import logging
 import eventlet
 import freezegun
 import pytest
-from mock import Mock
+from unittest.mock import Mock
 
 from nameko.testing.services import get_extension
 from nameko.testing.utils import wait_for_call
 
-from nameko_cron import Cron, cron
+from nameko_cron import ConcurrencyPolicy, Cron, cron
 
 
 @pytest.fixture
@@ -16,30 +16,38 @@ def tracker():
     return Mock()
 
 
-def test_cron_runs(container_factory, tracker):
+@pytest.mark.parametrize("timeout,concurrency,task_time,expected_calls", [
+    # the cron schedule is set to spawn a worker every second
+    (5, ConcurrencyPolicy.WAIT, 0, 5),    # a short-lived worker run at 0, 1, 2, 3, 4, 5
+    (5, ConcurrencyPolicy.WAIT, 2, 3),    # a long-lived worker should fire at 0, 2, 4
+    (5, ConcurrencyPolicy.ALLOW, 10, 5),   # if concurrency is permitted, new workers spawn alongside existing ones
+    (5, ConcurrencyPolicy.SKIP, 1.5, 3),  # skipping should run at 0, 2, and 4
+    (5, ConcurrencyPolicy.WAIT, 1.5, 4),  # run at 0, 1.5, 3, 4.5 (always behind)
+])
+def test_cron_runs(timeout, concurrency, task_time, expected_calls, container_factory, tracker):
     """Test running the cron main loop."""
-    timeout = 2.0
-
     class Service(object):
         name = "service"
 
-        @cron('* * * * * *')
+        @cron('* * * * * *', concurrency=concurrency)
         def tick(self):
-            eventlet.sleep(0)
             tracker()
+            eventlet.sleep(task_time)
 
     container = container_factory(Service, {})
 
-    # Check that Timer instance is initialized correctly
+    # Check that Cron instance is initialized correctly
     instance = get_extension(container, Cron)
     assert instance.schedule == '* * * * * *'
     assert instance.tz is None
+    assert instance.concurrency == concurrency
 
-    container.start()
-    eventlet.sleep(timeout)
-    container.stop()
+    with freezegun.freeze_time('2020-11-20 23:59:59.5', tick=True):
+        container.start()
+        eventlet.sleep(timeout)
+        container.stop()
 
-    assert tracker.call_count == 2
+        assert tracker.call_count == expected_calls
 
 
 @pytest.mark.parametrize("timezone,expected_first_interval_hours", [

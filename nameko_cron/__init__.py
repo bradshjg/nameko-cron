@@ -1,4 +1,5 @@
 import datetime
+from enum import Enum
 import time
 from logging import getLogger
 
@@ -13,11 +14,22 @@ from nameko.extensions import Entrypoint
 _log = getLogger(__name__)
 
 
+class ConcurrencyPolicy(Enum):
+    ALLOW = 'allow'
+    SKIP = 'skip'
+    WAIT = 'wait'
+
+
 class Cron(Entrypoint):
-    def __init__(self, schedule, tz=None, **kwargs):
+    def __init__(self, schedule: str, tz: str = None, concurrency: str = ConcurrencyPolicy.WAIT, **kwargs):
         """
         Cron entrypoint. Fires according to a (possibly timezone-aware)
         cron schedule. If no timezone info is passed, the default is UTC.
+        Set ``concurrency`` to ``ConcurrencyPolicy.ALLOW`` to allow multiple workers
+        to run simultaneously. Set ``concurrency`` to ``ConcurrencyPolicy.SKIP`` to
+        skip lapsed scheduled runs. The default behavior (``ConcurrencyPolicy.WAIT``)
+        is to wait until the running worker completes and immediately spawn another
+        if the schedule has lapsed.
 
         Example::
 
@@ -32,6 +44,7 @@ class Cron(Entrypoint):
         """
         self.schedule = schedule
         self.tz = tz
+        self.concurrency = concurrency
         self.should_stop = Event()
         self.worker_complete = Event()
         self.gt = None
@@ -74,10 +87,17 @@ class Cron(Entrypoint):
 
             self.handle_timer_tick()
 
-            self.worker_complete.wait()
-            self.worker_complete.reset()
+            if self.concurrency != ConcurrencyPolicy.ALLOW:
+                self.worker_complete.wait()
+                self.worker_complete.reset()
 
             sleep_time = next(interval)
+            print(sleep_time)
+
+            # a sleep time of zero represents that we've elapsed the next start time, so
+            # if the user set the policy to skip, we need to update the interval again.
+            if self.concurrency == ConcurrencyPolicy.SKIP and sleep_time == 0:
+                sleep_time = next(interval)
 
     def handle_timer_tick(self):
         args = ()
@@ -92,7 +112,9 @@ class Cron(Entrypoint):
             self, args, kwargs, handle_result=self.handle_result)
 
     def handle_result(self, worker_ctx, result, exc_info):
-        self.worker_complete.send()
+        # we only care about the worker completion if we're going to be waiting for it.
+        if self.concurrency != ConcurrencyPolicy.ALLOW:
+            self.worker_complete.send()
         return result, exc_info
 
 

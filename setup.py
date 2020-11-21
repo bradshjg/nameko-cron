@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="nameko-cron",
-    version="0.0.1",
+    version="0.1.0",
     author="bradshjg",
     author_email="james.g.bradshaw@gmail.com",
     description="Nameko cron extension",
@@ -15,8 +15,14 @@ setuptools.setup(
     packages=setuptools.find_packages(exclude=['tests']),
     classifiers=[
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
+        "Topic :: Internet",
+        "Topic :: Software Development :: Libraries :: Python Modules",
+        "Intended Audience :: Developers",
     ],
     python_requires='>=3.6',
     install_requires=[
