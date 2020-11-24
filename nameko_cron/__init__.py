@@ -92,7 +92,6 @@ class Cron(Entrypoint):
                 self.worker_complete.reset()
 
             sleep_time = next(interval)
-            print(sleep_time)
 
             # a sleep time of zero represents that we've elapsed the next start time, so
             # if the user set the policy to skip, we need to update the interval again.
